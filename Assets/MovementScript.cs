@@ -1,15 +1,16 @@
-
-using System.Collections;
-using System.Collections.Generic;
 using UnityEngine;
 
 public class MovementScript : MonoBehaviour
 {
-
     private Rigidbody2D rb;
+    private BoxCollider2D boxCollider;
+    [SerializeField] private LayerMask groundLayerMask;
+    [SerializeField] private float wallCheckDistance = 0.2f; // Adjust the distance based on your scene
+
     public float moveSpeed = 5f;
     public float jumpForce = 20f;
     private bool isGrounded;
+    private bool isTouchingWall;
     private Animator animator;
 
     // Start is called before the first frame update
@@ -17,39 +18,46 @@ public class MovementScript : MonoBehaviour
     {
         rb = GetComponent<Rigidbody2D>();
         animator = GetComponent<Animator>();
+        boxCollider = GetComponent<BoxCollider2D>();
     }
 
     // Update is called once per frame
     void Update()
     {
+        isGrounded = IsBottomTouchingGround();
+        isTouchingWall = IsTouchingWall();
+
         Move();
         UpdateAnimations();
-
-    }
-    void Move()
-    {
-        float horizontalInput = Input.GetAxis("Horizontal");
-        float verticalInput = Input.GetAxis("Vertical");
-
-        Vector2 movement = new Vector2(horizontalInput, 0);
-        movement.Normalize();
-
-        // Move the Rigidbody2D
-        rb.velocity = new Vector2(movement.x * moveSpeed, rb.velocity.y);
 
         if (Input.GetButtonDown("Jump") && isGrounded)
         {
             Jump();
         }
     }
-    
+
+    void Move()
+    {
+        float horizontalInput = Input.GetAxis("Horizontal");
+        Vector2 movement = new Vector2(horizontalInput, 0);
+        movement.Normalize();
+
+        // Check if touching a wall and moving towards it
+        if (isTouchingWall && Mathf.Sign(horizontalInput) == Mathf.Sign(transform.localScale.x))
+        {
+            // Prevent movement into the wall
+            rb.velocity = new Vector2(0, rb.velocity.y);
+        }
+        else
+        {
+            // Move using velocity
+            rb.velocity = new Vector2(movement.x * moveSpeed, rb.velocity.y);
+        }
+    }
+
     void Jump()
     {
-        if (isGrounded)
-        {
-            rb.velocity = new Vector2(rb.velocity.x, jumpForce);
-        }
-
+        rb.velocity = new Vector2(rb.velocity.x, jumpForce);
     }
 
     void UpdateAnimations()
@@ -62,7 +70,6 @@ public class MovementScript : MonoBehaviour
         }
         else
         {
-            // Check for walking
             if (isGrounded)
             {
                 animator.SetBool("IsIdle", false);
@@ -71,7 +78,6 @@ public class MovementScript : MonoBehaviour
             }
             else
             {
-                // Player is in the air, consider jumping
                 animator.SetBool("IsIdle", false);
                 animator.SetBool("IsWalking", false);
                 animator.SetBool("IsJumping", true);
@@ -82,7 +88,7 @@ public class MovementScript : MonoBehaviour
             {
                 FlipSprite(true);
             }
-            else if (rb.velocity.x > 0) // Added condition to handle right movement
+            else if (rb.velocity.x > 0)
             {
                 FlipSprite(false);
             }
@@ -96,23 +102,18 @@ public class MovementScript : MonoBehaviour
         transform.localScale = scale;
     }
 
-
-    void OnCollisionEnter2D(Collision2D collision)
+    bool IsBottomTouchingGround()
     {
-        // Check if the GameObject is grounded
-        if (collision.collider.CompareTag("Ground"))
-        {
-            isGrounded = true;
-        }
+        Vector2 bottomCenter = new Vector2(boxCollider.bounds.center.x, boxCollider.bounds.min.y);
+        float raycastLength = 0.1f;
+        RaycastHit2D hit = Physics2D.Raycast(bottomCenter, Vector2.down, raycastLength, groundLayerMask);
+        return hit.collider != null && hit.collider.CompareTag("Ground");
     }
 
-    void OnCollisionExit2D(Collision2D collision)
+    bool IsTouchingWall()
     {
-        // Update grounded status when leaving the ground
-        if (collision.collider.CompareTag("Ground"))
-        {
-            isGrounded = false;
-        }
+        Vector2 frontCenter = new Vector2(boxCollider.bounds.center.x + (boxCollider.bounds.size.x / 2f), boxCollider.bounds.center.y);
+        RaycastHit2D hit = Physics2D.Raycast(frontCenter, Vector2.right * transform.localScale.x, wallCheckDistance, groundLayerMask);
+        return hit.collider != null && !hit.collider.CompareTag("Ground");
     }
-
 }
